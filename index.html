@@ -472,20 +472,43 @@ const firebaseConfig={
 firebase.initializeApp(firebaseConfig);
 var db=firebase.database();
 
-// ── USER IDENTITY ──
-function getMyUserId(){
-  var id=localStorage.getItem('st_userid');
-  if(!id){id='u_'+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem('st_userid',id);}
-  return id;
+// ── USER IDENTITY — Name-based login ──
+function nameToId(name){
+  return 'user_'+name.trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
 }
 function getMyName(){return localStorage.getItem('st_username')||'';}
-var MY_ID=getMyUserId();
 var MY_NAME=getMyName();
+var MY_ID=MY_NAME?nameToId(MY_NAME):(localStorage.getItem('st_userid')||'');
 
-// User-scoped Firebase refs
-var sessionsRef=db.ref('users/'+MY_ID+'/sessions');
-var liveRef=db.ref('users/'+MY_ID+'/live');
-var profileRef=db.ref('users/'+MY_ID+'/profile');
+// Firebase refs — init after login
+var sessionsRef=null,liveRef=null,profileRef=null,_sessionsListener=null;
+
+function initFirebaseRefs(id){
+  if(sessionsRef&&_sessionsListener){sessionsRef.off('value',_sessionsListener);_sessionsListener=null;}
+  sessionsRef=db.ref('users/'+id+'/sessions');
+  liveRef=db.ref('users/'+id+'/live');
+  profileRef=db.ref('users/'+id+'/profile');
+}
+
+function startSessionListener(){
+  if(!sessionsRef)return;
+  sessionsRef.once('value',snap=>{
+    var firebaseData=snap.val();
+    try{
+      ['st_sessions_v3','st_sessions_v2','st_sessions'].forEach(key=>{
+        var ls=JSON.parse(localStorage.getItem(key)||'[]');
+        if(ls.length&&!firebaseData){var obj={};ls.forEach(s=>{obj['s'+s.id]=s;});sessionsRef.set(obj);localStorage.removeItem(key);}
+      });
+    }catch(e){}
+    _sessionsListener=function(snap2){
+      var data=snap2.val();
+      _sessions=data?Object.values(data).sort((a,b)=>b.id-a.id):[];
+      try{localStorage.setItem('st_sessions_v3',JSON.stringify(_sessions));}catch(e){}
+      render();
+    };
+    sessionsRef.on('value',_sessionsListener);
+  });
+}
 
 // In-memory sessions cache
 var _sessions=[];
@@ -497,44 +520,44 @@ function loadSessions(){return _sessions;}
 function saveSessions(arr){
   _sessions=arr;
   try{localStorage.setItem('st_sessions_v3',JSON.stringify(arr));}catch(e){}
+  if(!sessionsRef)return;
   var obj={};arr.forEach(s=>{obj['s'+s.id]=s;});
   sessionsRef.set(obj).catch(()=>{});
 }
 
-// Listen Firebase → real-time
-sessionsRef.once('value',snap=>{
-  var firebaseData=snap.val();
-  // Migrate old localStorage data
-  try{
-    ['st_sessions_v3','st_sessions_v2','st_sessions'].forEach(key=>{
-      var ls=JSON.parse(localStorage.getItem(key)||'[]');
-      if(ls.length&&!firebaseData){
-        var obj={};ls.forEach(s=>{obj['s'+s.id]=s;});
-        sessionsRef.set(obj);localStorage.removeItem(key);
-      }
-    });
-  }catch(e){}
-  sessionsRef.on('value',snap=>{
-    var data=snap.val();
-    _sessions=data?Object.values(data).sort((a,b)=>b.id-a.id):[];
-    try{localStorage.setItem('st_sessions_v3',JSON.stringify(_sessions));}catch(e){}
-    render();
-  });
-});
-
 // Offline fallback
 try{
   var lsKeys=['st_sessions_v3','st_sessions_v2','st_sessions'];
-  for(var ki=0;ki<lsKeys.length;ki++){var ls=JSON.parse(localStorage.getItem(lsKeys[ki])||'[]');if(ls.length){_sessions=ls;break;}}
+  for(var ki=0;ki<lsKeys.length;ki++){var lsv=JSON.parse(localStorage.getItem(lsKeys[ki])||'[]');if(lsv.length){_sessions=lsv;break;}}
 }catch(e){}
 
-// Save profile name to Firebase so public view can read it
 function saveProfile(name){
-  MY_NAME=name;localStorage.setItem('st_username',name);
-  profileRef.set({name:name,userId:MY_ID,updatedAt:Date.now()}).catch(()=>{});
-  // Update header
-  var ua=document.getElementById('user-avatar-name');
-  if(ua)ua.textContent=name;
+  MY_NAME=name;MY_ID=nameToId(name);
+  localStorage.setItem('st_username',name);localStorage.setItem('st_userid',MY_ID);
+  if(profileRef)profileRef.set({name:name,userId:MY_ID,updatedAt:Date.now()}).catch(()=>{});
+  var ua=document.getElementById('user-avatar-name');if(ua)ua.textContent=name;
+}
+
+// ── NAME-BASED LOGIN ──
+function loginWithName(name,callback){
+  var newId=nameToId(name);
+  MY_NAME=name;MY_ID=newId;
+  localStorage.setItem('st_username',name);localStorage.setItem('st_userid',newId);
+  initFirebaseRefs(newId);
+  profileRef.set({name:name,userId:newId,updatedAt:Date.now()}).catch(()=>{});
+  startSessionListener();
+  // Load any paused/live session for this account from Firebase
+  liveRef.once('value',snap=>{
+    var liveData=snap.val();
+    if(liveData)localStorage.setItem('st_live_session',JSON.stringify(liveData));
+    if(callback)callback(liveData);
+  });
+}
+
+// Init if already logged in
+if(MY_ID){
+  initFirebaseRefs(MY_ID);
+  startSessionListener();
 }
 
 // ── TIMER ──
@@ -574,9 +597,13 @@ function setStatus(state){
 }
 function setBtns(state){
   var area=document.getElementById('btn-area');
-  if(state==='idle')area.innerHTML='<button class="btn btn-start" onclick="startTimer()">▶ Start</button>';
-  else if(state==='running')area.innerHTML='<button class="btn btn-pause" onclick="pauseTimer()">⏸ Pause</button><button class="btn btn-save" onclick="saveSession()">✔ Save</button>';
-  else if(state==='paused')area.innerHTML='<button class="btn btn-resume" onclick="resumeTimer()">▶ Resume</button><button class="btn btn-save" onclick="saveSession()">✔ Save</button>';
+  if(state==='idle'){
+    area.innerHTML='<button class="btn btn-start" onclick="startTimer()">▶ Start</button>';
+  }else if(state==='running'){
+    area.innerHTML='<button class="btn btn-pause" onclick="pauseTimer()">⏸ Pause</button><button class="btn btn-save" onclick="saveSession()">✔ Save</button>';
+  }else if(state==='paused'){
+    area.innerHTML='<button class="btn btn-resume" onclick="resumeTimer()">▶ Resume</button><button class="btn btn-save" onclick="saveSession()">✔ Save</button>';
+  }
 }
 
 // ── SERVER TIME OFFSET (fixes clock skew between devices) ──
@@ -653,9 +680,21 @@ document.addEventListener('visibilitychange',()=>{
   }
 });
 function saveSession(){
-  elapsed=getElapsed();
+  // If paused, use frozen elapsed; if running use getElapsed()
+  if(!running&&pausedAt){
+    elapsed=Math.floor((pausedAt-startedAt)/1000)-pausedAccum;
+  } else {
+    elapsed=getElapsed();
+  }
+  if(elapsed<1){
+    // Try restoring from localStorage live session as fallback
+    try{
+      var saved=JSON.parse(localStorage.getItem('st_live_session')||'null');
+      if(saved&&saved.frozenElapsed>0)elapsed=saved.frozenElapsed;
+    }catch(e){}
+  }
   if(elapsed<1)return;
-  clearInterval(timerInt);running=false;
+  clearInterval(timerInt);running=false;pausedAt=0;
   liveRef.set({running:false}).catch(()=>{});
   localStorage.setItem('st_live_session',JSON.stringify({running:false}));
   var s=getSubject();
@@ -663,7 +702,8 @@ function saveSession(){
   var sessions=loadSessions();
   sessions.unshift({id:Date.now(),subject:s,category:c,duration:elapsed,date:todayKey(),time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})});
   saveSessions(sessions);
-  elapsed=0;document.getElementById('timer').textContent='00:00:00';
+  elapsed=0;pausedAccum=0;startedAt=0;
+  document.getElementById('timer').textContent='00:00:00';
   setStatus('stopped');setBtns('idle');
   render();
   checkCelebrate(sessions);
@@ -840,9 +880,39 @@ function openNameModal(){
 function saveName(){
   var n=document.getElementById('name-input').value.trim();
   if(!n){alert('Please enter your name.');return;}
-  saveProfile(n);
   document.getElementById('name-modal').classList.remove('open');
   updateHeaderName(n);
+  loginWithName(n,function(liveData){
+    // After login, check if there's a paused session in Firebase for this account
+    if(liveData&&liveData.paused&&liveData.frozenElapsed>0){
+      // Show restore prompt
+      var frozen=liveData.frozenElapsed;
+      var subj=liveData.subject||'Unknown';
+      if(confirm('You have a paused session: '+subj+' ('+fmt(frozen)+')\n\nResume it?')){
+        // Restore paused state
+        var sEl=document.getElementById('subj');
+        var cEl=document.getElementById('cat');
+        if(liveData.subject){
+          var found=false;
+          for(var i=0;i<sEl.options.length;i++){if(sEl.options[i].value===liveData.subject){sEl.selectedIndex=i;found=true;break;}}
+          if(!found){for(var i=0;i<sEl.options.length;i++){if(sEl.options[i].value==='Other'){sEl.selectedIndex=i;break;}}toggleOther(sEl);var oe=document.getElementById('other-subj');if(oe)oe.value=liveData.subject;}
+        }
+        if(liveData.category){for(var i=0;i<cEl.options.length;i++){if(cEl.options[i].value===liveData.category){cEl.selectedIndex=i;break;}}}
+        var now=serverNow();
+        pausedAccum=liveData.pausedAccum||0;
+        pausedAt=now;
+        startedAt=now-((frozen+pausedAccum)*1000);
+        running=false;elapsed=frozen;
+        document.getElementById('timer').textContent=fmt(frozen);
+        setStatus('paused');setBtns('paused');
+      } else {
+        // Discard paused session
+        liveRef.set({running:false}).catch(()=>{});
+        localStorage.setItem('st_live_session',JSON.stringify({running:false}));
+      }
+    }
+    render();
+  });
 }
 function updateHeaderName(name){
   var initials=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)||'?';
@@ -854,23 +924,35 @@ function updateHeaderName(name){
 
 setBtns('idle');setStatus('stopped');render();
 
-// Show name modal if no name saved
-if(!MY_NAME){
-  document.getElementById('name-modal').classList.add('open');
-  setTimeout(()=>document.getElementById('name-input').focus(),200);
-} else {
-  updateHeaderName(MY_NAME);
-}
-
-// ── RESTORE LIVE STATE ON PAGE LOAD (app reopen, tab restore) ──
+// ── RESTORE LIVE STATE ON PAGE LOAD ──
 (function restoreState(){
   try{
     var saved=JSON.parse(localStorage.getItem('st_live_session')||'null');
-    if(saved&&saved.running&&saved.startedAt){
-      var sEl=document.getElementById('subj');
-      var cEl=document.getElementById('cat');
-      if(saved.subject){for(var i=0;i<sEl.options.length;i++)if(sEl.options[i].value===saved.subject){sEl.selectedIndex=i;break;}}
-      if(saved.category){for(var i=0;i<cEl.options.length;i++)if(cEl.options[i].value===saved.category){cEl.selectedIndex=i;break;}}
+    if(!saved)return;
+
+    // Restore subject/category dropdowns
+    var sEl=document.getElementById('subj');
+    var cEl=document.getElementById('cat');
+    if(saved.subject){
+      // Check built-in options first
+      var found=false;
+      for(var i=0;i<sEl.options.length;i++){
+        if(sEl.options[i].value===saved.subject){sEl.selectedIndex=i;found=true;break;}
+      }
+      // If custom subject (Other), show other input
+      if(!found){
+        for(var i=0;i<sEl.options.length;i++){if(sEl.options[i].value==='Other'){sEl.selectedIndex=i;break;}}
+        toggleOther(sEl);
+        var otherEl=document.getElementById('other-subj');
+        if(otherEl)otherEl.value=saved.subject;
+      }
+    }
+    if(saved.category){
+      for(var i=0;i<cEl.options.length;i++){if(cEl.options[i].value===saved.category){cEl.selectedIndex=i;break;}}
+    }
+
+    if(saved.running&&saved.startedAt){
+      // ── RESTORE RUNNING ──
       startedAt=saved.startedAt;
       pausedAccum=saved.pausedAccum||0;
       pausedAt=0;running=true;
@@ -879,9 +961,65 @@ if(!MY_NAME){
       clearInterval(timerInt);
       timerInt=setInterval(tickTimer,500);
       setStatus('running');setBtns('running');
+
+    } else if(saved.paused&&saved.frozenElapsed!=null){
+      // ── RESTORE PAUSED → AUTO SAVE ──
+      var frozen=saved.frozenElapsed||0;
+      if(frozen>0){
+        // Auto-save the paused session immediately
+        var s2=saved.subject||document.getElementById('subj').value;
+        var c2=saved.category||document.getElementById('cat').value;
+        var sessions2=loadSessions();
+        // Check not already saved (avoid duplicate)
+        var alreadySaved=sessions2.some(s=>Math.abs(s.duration-frozen)<5&&s.date===todayKey());
+        if(!alreadySaved){
+          sessions2.unshift({
+            id:Date.now(),
+            subject:s2,
+            category:c2,
+            duration:frozen,
+            date:todayKey(),
+            time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
+            restored:true
+          });
+          saveSessions(sessions2);
+          // Show toast
+          var toast=document.createElement('div');
+          toast.style.cssText='position:fixed;top:70px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#1D9E75,#0F6E56);color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4);animation:slideUp2 .3s ease';
+          toast.textContent='✅ Paused session saved — '+fmt(frozen);
+          document.body.appendChild(toast);
+          setTimeout(()=>toast.remove(),4000);
+        }
+        // Clear live state
+        localStorage.setItem('st_live_session',JSON.stringify({running:false}));
+        liveRef.set({running:false}).catch(()=>{});
+        // Reset timer UI
+        document.getElementById('timer').textContent='00:00:00';
+        setStatus('stopped');setBtns('idle');
+        render();
+      }
     }
-  }catch(e){}
+  }catch(e){console.error('restoreState',e);}
 })();
+
+// ── CLEAN UNKNOWN USERS FROM FIREBASE ──
+db.ref('users').once('value',snap=>{
+  var data=snap.val()||{};
+  Object.entries(data).forEach(([uid,u])=>{
+    var name=u&&u.profile&&u.profile.name;
+    if(!name||name==='Unknown'||name.trim()===''){
+      db.ref('users/'+uid).remove().catch(()=>{});
+    }
+  });
+});
+
+// ── NAME MODAL — only show if no name saved ──
+if(!MY_NAME){
+  document.getElementById('name-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('name-input').focus(),200);
+} else {
+  updateHeaderName(MY_NAME);
+}
 
 // ── PWA INSTALL PROMPT ──
 var deferredPrompt=null;
