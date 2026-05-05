@@ -188,6 +188,24 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
 .other-input-wrap.show{display:block}
 
 
+/* ── SCHEDULE STYLES ── */
+.sched-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:.9rem 1rem;margin-bottom:1rem}
+.sched-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sched-title{font-size:13px;font-weight:500}
+.sched-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border);flex-wrap:wrap}
+.sched-time-badge{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(127,119,221,.15);border:1px solid rgba(127,119,221,.25);color:#a8a3e8;white-space:nowrap;flex-shrink:0}
+.sched-time-badge.sched-active{background:rgba(29,158,117,.15);border-color:rgba(29,158,117,.3);color:#5DCAA5;animation:schedPulse 1s ease infinite alternate}
+@keyframes schedPulse{to{opacity:.6}}
+.sched-info{flex:1;min-width:0}
+.sched-name{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sched-meta{font-size:10px;color:var(--hint);margin-top:1px}
+.sched-dur-badge{font-family:'Syne',sans-serif;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
+.sched-countdown{font-size:10px;color:var(--amber);font-weight:500;white-space:nowrap}
+.btn-sched-start{background:linear-gradient(135deg,#1D9E75,#0F6E56);border:none;border-radius:7px;padding:5px 11px;color:#fff;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif;transition:opacity .12s}
+.btn-sched-start:hover{opacity:.85}
+.btn-sched-del{background:none;border:none;cursor:pointer;color:var(--hint);font-size:15px;padding:0 3px;flex-shrink:0;transition:color .1s}
+.btn-sched-del:hover{color:var(--red)}
+
 @media(max-width:600px){
   .control-panel,.charts-row{grid-template-columns:1fr}
   .stats-row{grid-template-columns:repeat(3,1fr)}
@@ -353,6 +371,15 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
     </div>
   </div>
 
+  <!-- SCHEDULE -->
+  <div class="sched-card">
+    <div class="sched-header">
+      <span class="sched-title">📅 Scheduled sessions</span>
+      <button class="btn" onclick="openSchedModal()" style="background:linear-gradient(135deg,#7F77DD,#534AB7);font-size:11px;padding:5px 12px;flex:none">+ Add schedule</button>
+    </div>
+    <div id="sched-list"><p class="empty">No schedules yet — add one above.</p></div>
+  </div>
+
   <!-- SESSION LOG -->
   <div class="sessions-card">
     <div class="sessions-header">
@@ -410,8 +437,209 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
   </div>
 </div>
 
+<!-- SCHEDULE ADD MODAL -->
+<div class="modal-overlay" id="sched-modal" onclick="if(event.target===this)closeSchedModal()">
+  <div class="modal">
+    <div class="modal-title">Add scheduled session <button class="modal-close" onclick="closeSchedModal()">✕</button></div>
+    <div class="modal-label">Subject</div>
+    <select class="modal-input" id="sc-subj">
+      <option value="Biology">Biology</option>
+      <option value="Chemistry">Chemistry</option>
+      <option value="Physics">Physics</option>
+      <option value="Combined Maths">Combined Maths</option>
+      <option value="ICT">ICT</option>
+      <option value="Other">Other</option>
+    </select>
+    <div class="modal-label">Category</div>
+    <select class="modal-input" id="sc-cat">
+      <option value="Study">Study</option>
+      <option value="Revision">Revision</option>
+      <option value="Practice">Practice</option>
+      <option value="Reading">Reading</option>
+    </select>
+    <div class="modal-label">Start time</div>
+    <input class="modal-input" id="sc-start" type="time">
+    <div class="modal-label">Duration</div>
+    <div class="modal-row">
+      <div><input class="modal-input" id="sc-hr" type="number" min="0" max="12" placeholder="h" style="text-align:center"></div>
+      <div><input class="modal-input" id="sc-min" type="number" min="0" max="59" placeholder="min" style="text-align:center"></div>
+      <div><input class="modal-input" id="sc-sec" type="number" min="0" max="59" placeholder="sec" style="text-align:center"></div>
+    </div>
+    <div class="modal-label">Date</div>
+    <input class="modal-input" id="sc-date" type="date">
+    <div class="modal-btn-row">
+      <button class="modal-btn modal-btn-cancel" onclick="closeSchedModal()">Cancel</button>
+      <button class="modal-btn modal-btn-save" onclick="saveSchedule()">Save schedule</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// ── SUBJECT HELPERS ──
+// ── SCHEDULE SYSTEM ──
+var _schedules=[];
+var _schedTimers={};
+
+function loadSchedules(){
+  try{return JSON.parse(localStorage.getItem('st_schedules')||'[]');}catch(e){return[];}
+}
+function saveSchedulesLocal(arr){
+  _schedules=arr;
+  try{localStorage.setItem('st_schedules',JSON.stringify(arr));}catch(e){}
+  // Also push to Firebase under this user
+  if(MY_ID){
+    var obj={};arr.forEach(s=>{obj['sc'+s.id]=s;});
+    db.ref('users/'+MY_ID+'/schedules').set(arr.length?obj:null).catch(()=>{});
+  }
+}
+_schedules=loadSchedules();
+
+function openSchedModal(){
+  var now=new Date();
+  var hh=String(now.getHours()).padStart(2,'0');
+  var mm=String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('sc-start').value=hh+':'+mm;
+  document.getElementById('sc-date').value=now.toISOString().slice(0,10);
+  document.getElementById('sc-hr').value='';
+  document.getElementById('sc-min').value='';
+  document.getElementById('sc-sec').value='';
+  document.getElementById('sched-modal').classList.add('open');
+}
+function closeSchedModal(){document.getElementById('sched-modal').classList.remove('open');}
+
+function saveSchedule(){
+  var subj=document.getElementById('sc-subj').value;
+  var cat=document.getElementById('sc-cat').value;
+  var startTime=document.getElementById('sc-start').value;
+  var date=document.getElementById('sc-date').value||todayKey();
+  var h=parseInt(document.getElementById('sc-hr').value)||0;
+  var m=parseInt(document.getElementById('sc-min').value)||0;
+  var s=parseInt(document.getElementById('sc-sec').value)||0;
+  var dur=h*3600+m*60+s;
+  if(!startTime){alert('Please set a start time.');return;}
+  if(dur<30){alert('Duration must be at least 30 seconds.');return;}
+  var sc={id:Date.now(),subject:subj,category:cat,startTime:startTime,date:date,duration:dur};
+  var arr=loadSchedules();
+  arr.push(sc);
+  arr.sort((a,b)=>a.startTime.localeCompare(b.startTime));
+  saveSchedulesLocal(arr);
+  closeSchedModal();
+  renderSchedules();
+}
+
+function deleteSchedule(id){
+  var arr=loadSchedules().filter(s=>s.id!==id);
+  saveSchedulesLocal(arr);
+  renderSchedules();
+}
+
+function startScheduledSession(sc){
+  // Set dropdowns
+  var sEl=document.getElementById('subj');
+  var cEl=document.getElementById('cat');
+  for(var i=0;i<sEl.options.length;i++){if(sEl.options[i].value===sc.subject){sEl.selectedIndex=i;break;}}
+  for(var i=0;i<cEl.options.length;i++){if(cEl.options[i].value===sc.category){cEl.selectedIndex=i;break;}}
+  // If timer already running, save first
+  if(running){saveSession();}
+  // Start timer
+  startTimer();
+  // Schedule auto-stop
+  if(_schedTimers[sc.id])clearTimeout(_schedTimers[sc.id]);
+  _schedTimers[sc.id]=setTimeout(function(){
+    if(running){
+      saveSession();
+      // Toast
+      var t=document.createElement('div');
+      t.style.cssText='position:fixed;top:70px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#7F77DD,#534AB7);color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4)';
+      t.textContent='⏰ Schedule complete: '+sc.subject+' saved!';
+      document.body.appendChild(t);
+      setTimeout(()=>t.remove(),5000);
+    }
+  }, sc.duration*1000);
+  renderSchedules();
+}
+
+function getSchedStatus(sc){
+  var now=new Date();
+  var today=todayKey();
+  if(sc.date!==today)return'other';
+  var parts=sc.startTime.split(':');
+  var startDt=new Date();
+  startDt.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);
+  var endDt=new Date(startDt.getTime()+sc.duration*1000);
+  if(now<startDt)return'upcoming';
+  if(now>=startDt&&now<endDt)return'active';
+  return'done';
+}
+
+function getSchedCountdown(sc){
+  var now=new Date();
+  var parts=sc.startTime.split(':');
+  var startDt=new Date();
+  startDt.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);
+  var diff=Math.floor((startDt-now)/1000);
+  if(diff<=0)return null;
+  if(diff<3600)return'Starts in '+Math.floor(diff/60)+'m '+( diff%60)+'s';
+  return'Starts in '+Math.floor(diff/3600)+'h '+Math.floor((diff%3600)/60)+'m';
+}
+
+function renderSchedules(){
+  var arr=loadSchedules();
+  var list=document.getElementById('sched-list');
+  if(!arr.length){list.innerHTML='<p class="empty">No schedules yet — add one above.</p>';return;}
+  list.innerHTML=arr.map(sc=>{
+    var status=getSchedStatus(sc);
+    var cdText=status==='upcoming'?getSchedCountdown(sc):null;
+    var isToday=sc.date===todayKey();
+    var statusLabel=status==='active'?'🟢 Now':(status==='done'?'✓ Done':(isToday?'⏳ Upcoming':'📅 '+sc.date));
+    return`<div class="sched-item">
+      <span class="sched-time-badge${status==='active'?' sched-active':''}">${sc.startTime}</span>
+      <div class="sched-info">
+        <div class="sched-name"><span style="display:inline-block;background:${SUBJ_COLORS[sc.subject]||'#5F5E5A'};color:#fff;font-size:10px;padding:1px 7px;border-radius:10px;margin-right:5px">${sc.subject}</span>${sc.category}</div>
+        <div class="sched-meta">${statusLabel}${cdText?` · <span class="sched-countdown">${cdText}</span>`:''} · ${fmtSec(sc.duration)}</div>
+      </div>
+      ${status==='upcoming'||status==='active'?`<button class="btn-sched-start" onclick="startScheduledSession(${JSON.stringify(sc).replace(/"/g,'&quot;')})">▶ Start now</button>`:''}
+      <button class="btn-sched-del" onclick="deleteSchedule(${sc.id})" title="Delete">×</button>
+    </div>`;
+  }).join('');
+}
+
+// Update schedule countdown every 30s
+setInterval(renderSchedules,30000);
+renderSchedules();
+
+// Auto-start schedules at their scheduled time (within 60s window)
+setInterval(function(){
+  var arr=loadSchedules();
+  arr.forEach(function(sc){
+    if(sc.date!==todayKey())return;
+    if(sc._autoTriggered)return;
+    var parts=sc.startTime.split(':');
+    var startDt=new Date();
+    startDt.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);
+    var diff=Math.abs(Date.now()-startDt.getTime());
+    // Within 30s window of start time and page is focused
+    if(diff<30000&&!document.hidden&&!running){
+      sc._autoTriggered=true;
+      // Show toast with option to start
+      var t=document.createElement('div');
+      t.style.cssText='position:fixed;top:70px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#7F77DD,#534AB7);color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4);display:flex;align-items:center;gap:10px';
+      t.innerHTML='⏰ <span>Scheduled: <b>'+sc.subject+'</b> starting now!</span><button onclick="startScheduledSession('+JSON.stringify(sc).replace(/"/g,"'")+')" style="background:rgba(255,255,255,.2);border:none;border-radius:6px;padding:5px 10px;color:#fff;font-size:12px;cursor:pointer;font-family:inherit">▶ Start</button>';
+      document.body.appendChild(t);
+      setTimeout(()=>t.remove(),15000);
+    }
+  });
+},10000);
+
+// Push existing schedules to Firebase on login
+function syncSchedulesToFirebase(){
+  if(!MY_ID)return;
+  var arr=loadSchedules();
+  var obj={};arr.forEach(s=>{obj['sc'+s.id]=s;});
+  db.ref('users/'+MY_ID+'/schedules').set(arr.length?obj:null).catch(()=>{});
+}
+</script>
+
+<script>
 function toggleOther(sel){
   document.getElementById('other-wrap').classList.toggle('show', sel.value==='Other');
 }
@@ -944,6 +1172,7 @@ function saveName(){
       }
     }
     render();
+    syncSchedulesToFirebase();
   });
 }
 function updateHeaderName(name){
