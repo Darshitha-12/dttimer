@@ -206,6 +206,10 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
 .btn-sched-del{background:none;border:none;cursor:pointer;color:var(--hint);font-size:15px;padding:0 3px;flex-shrink:0;transition:color .1s}
 .btn-sched-del:hover{color:var(--red)}
 
+/* TARGET PRESET BUTTONS */
+.target-preset-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 0;font-size:13px;font-weight:500;color:rgba(255,255,255,.6);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s}
+.target-preset-btn:hover{background:rgba(29,158,117,.12);border-color:rgba(29,158,117,.3);color:#5DCAA5}
+.target-preset-btn.selected{background:rgba(29,158,117,.2);border-color:rgba(29,158,117,.4);color:#5DCAA5;font-weight:600}
 @media(max-width:600px){
   .control-panel,.charts-row{grid-template-columns:1fr}
   .stats-row{grid-template-columns:repeat(3,1fr)}
@@ -301,8 +305,8 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
   <!-- DAILY TARGET -->
   <div class="target-card" id="target-card">
     <div class="target-header">
-      <span class="target-title">Daily target — 10 hours</span>
-      <span class="target-badge incomplete" id="target-badge">In progress</span>
+      <span class="target-title" id="target-title-txt">Daily target — 10h</span>
+      <div style="display:flex;align-items:center;gap:6px"><button onclick="openTargetModal()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:3px 9px;font-size:11px;color:rgba(255,255,255,.4);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s" title="Set daily target">⚙ Target</button><span class="target-badge incomplete" id="target-badge">In progress</span></div>
     </div>
     <div class="target-bar-bg">
       <div class="target-bar-fill" id="target-bar" style="width:0%"></div>
@@ -622,12 +626,14 @@ setInterval(function(){
     // Within 30s window of start time and page is focused
     if(diff<30000&&!document.hidden&&!running){
       sc._autoTriggered=true;
-      // Show toast with option to start
+      // Auto-start the session
+      startScheduledSession(sc);
+      // Show notification toast
       var t=document.createElement('div');
-      t.style.cssText='position:fixed;top:70px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#7F77DD,#534AB7);color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4);display:flex;align-items:center;gap:10px';
-      t.innerHTML='⏰ <span>Scheduled: <b>'+sc.subject+'</b> starting now!</span><button onclick="startScheduledSession('+JSON.stringify(sc).replace(/"/g,"'")+')" style="background:rgba(255,255,255,.2);border:none;border-radius:6px;padding:5px 10px;color:#fff;font-size:12px;cursor:pointer;font-family:inherit">▶ Start</button>';
+      t.style.cssText='position:fixed;top:70px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#1D9E75,#0F6E56);color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4);display:flex;align-items:center;gap:8px';
+      t.innerHTML='⏰ <span>Auto-started: <b>'+sc.subject+'</b> — will stop in '+fmtSec(sc.duration)+'</span>';
       document.body.appendChild(t);
-      setTimeout(()=>t.remove(),15000);
+      setTimeout(()=>t.remove(),6000);
     }
   });
 },10000);
@@ -659,7 +665,7 @@ function getSubject(){
 
 // ── MANUAL ADD MODAL ──
 function openManualModal(){
-  document.getElementById('m-date').value=new Date().toISOString().slice(0,10);
+  var _n=new Date();document.getElementById('m-date').value=_n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0');
   document.getElementById('m-hr').value='';
   document.getElementById('m-min').value='';
   document.getElementById('m-sec').value='';
@@ -684,7 +690,8 @@ function saveManualSession(){
 }
 
 // ── CONSTANTS ──
-var DAILY_TARGET=36000;
+var DAILY_TARGET=parseInt(localStorage.getItem('st_daily_target'))||36000;
+function updateDailyTarget(secs){DAILY_TARGET=secs;localStorage.setItem('st_daily_target',secs);if(MY_ID)db.ref('users/'+MY_ID+'/settings/dailyTarget').set(secs).catch(()=>{});var hrs=Math.round(secs/3600*10)/10;document.getElementById('target-title-txt').textContent='Daily target — '+hrs+'h';render();}
 var EXAM=new Date('2026-08-10T00:00:00');
 var SUBJ_COLORS={'Biology':'#1D9E75','Chemistry':'#378ADD','Physics':'#7F77DD','Combined Maths':'#D85A30','ICT':'#EF9F27','Other':'#5F5E5A'};
 var CAT_COLORS={'Study':'#1D9E75','Revision':'#7F77DD','Practice':'#EF9F27','Reading':'#378ADD'};
@@ -1315,5 +1322,30 @@ window.addEventListener('beforeinstallprompt',e=>{
 window.addEventListener('appinstalled',()=>{installBar.style.display='none';});
 
 </script>
+
+<!-- DAILY TARGET MODAL -->
+<div class="modal-overlay" id="target-modal" onclick="if(event.target===this)closeTargetModal()">
+  <div class="modal">
+    <div class="modal-title">⚙ Daily target <button class="modal-close" onclick="closeTargetModal()">✕</button></div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:1rem;margin-top:-.4rem">Set your daily study goal. This syncs to the public view.</p>
+    <div class="modal-label">Hours per day</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem" id="target-presets">
+      <button class="target-preset-btn" onclick="selectTargetPreset(2)">2h</button>
+      <button class="target-preset-btn" onclick="selectTargetPreset(4)">4h</button>
+      <button class="target-preset-btn" onclick="selectTargetPreset(6)">6h</button>
+      <button class="target-preset-btn" onclick="selectTargetPreset(8)">8h</button>
+      <button class="target-preset-btn" onclick="selectTargetPreset(10)">10h</button>
+      <button class="target-preset-btn" onclick="selectTargetPreset(12)">12h</button>
+      <button class="target-preset-btn" onclick="selectTargetPreset(14)">14h</button>
+      <button class="target-preset-btn" onclick="selectTargetPreset(16)">16h</button>
+    </div>
+    <div class="modal-label">Custom (hours)</div>
+    <input class="modal-input" id="target-custom-input" type="number" min="0.5" max="24" step="0.5" placeholder="e.g. 7.5">
+    <div class="modal-btn-row">
+      <button class="modal-btn modal-btn-cancel" onclick="closeTargetModal()">Cancel</button>
+      <button class="modal-btn modal-btn-save" onclick="saveTargetModal()">Save</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
