@@ -550,6 +550,7 @@ function loginWithName(name,callback){
   liveRef.once('value',snap=>{
     var liveData=snap.val();
     if(liveData)localStorage.setItem('st_live_session',JSON.stringify(liveData));
+    setupPresence();
     if(callback)callback(liveData);
   });
 }
@@ -558,6 +559,7 @@ function loginWithName(name,callback){
 if(MY_ID){
   initFirebaseRefs(MY_ID);
   startSessionListener();
+  setupPresence();
 }
 
 // ── TIMER ──
@@ -606,12 +608,42 @@ function setBtns(state){
   }
 }
 
-// ── SERVER TIME OFFSET (fixes clock skew between devices) ──
+// ── SERVER TIME OFFSET ──
 var serverTimeOffset=0;
-db.ref('.info/serverTimeOffset').on('value',snap=>{
-  serverTimeOffset=snap.val()||0;
-});
+db.ref('.info/serverTimeOffset').on('value',snap=>{serverTimeOffset=snap.val()||0;});
 function serverNow(){return Date.now()+serverTimeOffset;}
+
+// ── PRESENCE TRACKING ──
+// Uses Firebase onDisconnect — automatically marks offline when tab closes/phone locks
+var presenceRef=null;
+function setupPresence(){
+  if(!MY_ID)return;
+  presenceRef=db.ref('users/'+MY_ID+'/presence');
+  db.ref('.info/connected').on('value',snap=>{
+    if(!snap.val()){return;}
+    // When disconnected — Firebase auto-sets offline
+    presenceRef.onDisconnect().set({online:false,lastSeen:Date.now()});
+    // Mark online now
+    presenceRef.set({online:true,lastSeen:Date.now()});
+  });
+}
+// Also update lastSeen every 30s while tab is open
+setInterval(()=>{if(presenceRef&&MY_ID)presenceRef.update({lastSeen:Date.now()});},30000);
+// Mark offline when tab/window is hidden
+document.addEventListener('visibilitychange',()=>{
+  if(!presenceRef)return;
+  if(document.hidden){
+    presenceRef.set({online:false,lastSeen:Date.now()});
+  } else {
+    presenceRef.set({online:true,lastSeen:Date.now()});
+    // Also restart timer if was running
+    if(running){clearInterval(timerInt);timerInt=setInterval(tickTimer,500);}
+  }
+});
+// Mark offline on page unload
+window.addEventListener('beforeunload',()=>{
+  if(presenceRef)presenceRef.set({online:false,lastSeen:Date.now()});
+});
 
 function saveLiveState(isRunning){
   var s=getSubject();
