@@ -497,8 +497,10 @@ function openSchedModal(){
   var now=new Date();
   var hh=String(now.getHours()).padStart(2,'0');
   var mm=String(now.getMinutes()).padStart(2,'0');
+  // Use local date (not UTC) to avoid timezone offset issues
+  var localDate=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
   document.getElementById('sc-start').value=hh+':'+mm;
-  document.getElementById('sc-date').value=now.toISOString().slice(0,10);
+  document.getElementById('sc-date').value=localDate;
   document.getElementById('sc-hr').value='';
   document.getElementById('sc-min').value='';
   document.getElementById('sc-sec').value='';
@@ -740,7 +742,7 @@ function startSessionListener(){
 
 // In-memory sessions cache
 var _sessions=[];
-function todayKey(){return new Date().toISOString().slice(0,10)}
+function todayKey(){var n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}
 function fmt(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;return[h,m,sc].map(x=>String(x).padStart(2,'0')).join(':')}
 function fmtSec(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?h+'h '+m+'m':m+'m'}
 
