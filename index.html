@@ -42,29 +42,40 @@ html::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;z-index:9
 
 /* ══ SCHEDULE ITEMS REDESIGN ══ */
 .sched-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 12px;
-  border-radius: 12px;
-  margin-bottom: 7px;
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(255,255,255,.07);
-  transition: all .25s ease;
-  position: relative;
-  overflow: hidden;
+  display: inline-flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  width: calc(50% - 4px) !important;
+  min-height: 100px !important;
+  padding: 10px 11px 9px !important;
+  border-radius: 12px !important;
+  margin-bottom: 0 !important;
+  background: rgba(255,255,255,.03) !important;
+  border: 1px solid rgba(255,255,255,.07) !important;
+  transition: all .25s ease !important;
+  position: relative !important;
+  overflow: hidden !important;
+  vertical-align: top !important;
+  box-sizing: border-box !important;
 }
 .sched-item::before {
-  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
-  background:rgba(255,255,255,.1);border-radius:3px 0 0 3px;
+  content:'';position:absolute;top:0;left:0;right:0;height:3px !important;
+  width:auto !important; bottom:auto !important;
+  background:rgba(255,255,255,.12);border-radius:0 0 3px 3px;
   transition: background .3s;
+}
+/* Grid wrapper */
+#sched-list {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 7px !important;
 }
 .sched-item-upcoming {
   border-color: rgba(201,168,76,.25) !important;
   background: rgba(201,168,76,.05) !important;
   animation: upcomingPulse 2.5s ease-in-out infinite;
 }
-.sched-item-upcoming::before { background: linear-gradient(180deg,#c9a84c,#f0d080) !important; }
+.sched-item-upcoming::before { background: linear-gradient(90deg,#c9a84c,#f0d080) !important; }
 @keyframes upcomingPulse {
   0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,0)}
   50%{box-shadow:0 0 0 3px rgba(201,168,76,.12)}
@@ -74,7 +85,7 @@ html::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;z-index:9
   background: rgba(29,158,117,.08) !important;
   animation: activePulse 1.8s ease-in-out infinite;
 }
-.sched-item-active::before { background: linear-gradient(180deg,#1D9E75,#5DCAA5) !important; box-shadow: 0 0 8px rgba(29,158,117,.6); }
+.sched-item-active::before { background: linear-gradient(90deg,#1D9E75,#5DCAA5) !important; box-shadow: 0 0 8px rgba(29,158,117,.4); }
 @keyframes activePulse {
   0%,100%{box-shadow:0 0 0 1px rgba(29,158,117,.15),0 2px 12px rgba(29,158,117,.1)}
   50%{box-shadow:0 0 0 2px rgba(29,158,117,.3),0 4px 20px rgba(29,158,117,.2)}
@@ -83,19 +94,19 @@ html::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;z-index:9
   border-color: rgba(160,112,64,.3) !important;
   background: rgba(160,112,64,.06) !important;
 }
-.sched-item-break::before { background: linear-gradient(180deg,#a07040,#c9a84c) !important; }
+.sched-item-break::before { background: linear-gradient(90deg,#a07040,#c9a84c) !important; }
 
 .sched-item-left {
-  display:flex;flex-direction:column;align-items:center;min-width:44px;flex-shrink:0;
+  display:flex;flex-direction:row;align-items:baseline;gap:5px;margin-bottom:5px;width:100%;
 }
 .sched-item-time {
-  font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#e0f5ea;line-height:1;
+  font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:#e0f5ea;line-height:1;
 }
 .sit-active { color:#5DCAA5 !important;text-shadow:0 0 10px rgba(29,158,117,.5); }
-.sched-item-dur { font-size:9px;color:rgba(255,255,255,.3);margin-top:2px; }
+.sched-item-dur { font-size:9px;color:rgba(255,255,255,.28); }
 
-.sched-item-body { flex:1;min-width:0; }
-.sched-item-top { display:flex;align-items:center;gap:6px;margin-bottom:3px; }
+.sched-item-body { flex:1;min-width:0;width:100%; }
+.sched-item-top { display:flex;align-items:center;gap:5px;margin-bottom:4px;flex-wrap:wrap; }
 .sched-item-subj {
   font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;
   border:1px solid;white-space:nowrap;flex-shrink:0;
@@ -117,7 +128,7 @@ html::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;z-index:9
 .sb-done    { color:rgba(255,255,255,.3);  background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08); }
 .sb-other   { color:rgba(127,119,221,.9); background:rgba(127,119,221,.08);border-color:rgba(127,119,221,.2); }
 
-.sched-item-actions { display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0; }
+.sched-item-actions { display:flex;flex-direction:row;gap:4px;align-items:center;margin-top:auto;padding-top:6px;width:100%; }
 .btn-sched-start {
   background:linear-gradient(135deg,#0a3d1e,#1D9E75);
   border:none;border-radius:7px;padding:5px 10px;color:#fff;
@@ -943,19 +954,23 @@ function renderSchedules(){
     }
 
     return '<div class="sched-item'+activeClass+upcomingClass+breakClass+'">'
+      // Top bar: time + duration
       +'<div class="sched-item-left">'
         +'<div class="sched-item-time'+(status==='active'?' sit-active':'')+'">'+sc.startTime+'</div>'
         +'<div class="sched-item-dur">'+fmtSec(sc.duration)+'</div>'
       +'</div>'
+      // Subject + category
       +'<div class="sched-item-body">'
         +'<div class="sched-item-top">'
           +'<span class="sched-item-subj" style="background:'+scColor+'22;border-color:'+scColor+'55;color:'+scColor+'">'+label+'</span>'
           +(isBreak?'':'<span class="sched-item-cat">'+sc.category+'</span>')
         +'</div>'
         +unitHtml
-        +'<div class="'+badgeClass+'">'+statusIcon+' '+statusTxt+'</div>'
       +'</div>'
+      // Status badge + actions at bottom
       +'<div class="sched-item-actions">'
+        +'<div class="'+badgeClass+'" style="font-size:9px;padding:2px 7px">'+statusIcon+' '+statusTxt+'</div>'
+        +'<span style="flex:1"></span>'
         +startBtn
         +'<button class="btn-sched-del" onclick="deleteSchedule('+sc.id+')" title="Delete">×</button>'
       +'</div>'
@@ -1864,6 +1879,42 @@ window.addEventListener('appinstalled',()=>{installBar.style.display='none';});
   // ── Ambient ──
   for(var i=0;i<10;i++){var el=document.createElement('div');el.className='lotus-petal';var sz=4+Math.random()*5,lx=(Math.random()-.5)*60;el.style.cssText='left:'+(Math.random()*100)+'%;bottom:-10px;--ls:'+sz+'px;--ld:'+(10+Math.random()*10)+'s;--ldel:'+(-Math.random()*10)+'s;--lx:'+lx+'px';document.body.appendChild(el);}
   for(var i=0;i<12;i++){var el=document.createElement('div');el.className='firefly';var fx=(Math.random()-.5)*60,fy=-(20+Math.random()*50);el.style.cssText='left:'+(Math.random()*100)+'%;top:'+(20+Math.random()*70)+'%;--fd:'+(5+Math.random()*8)+'s;--fdel:'+(-Math.random()*8)+'s;--fx:'+fx+'px;--fy:'+fy+'px';document.body.appendChild(el);}
+
+
+  // ── AUTO-START scheduled sessions ──
+  var _autoStarted={};
+  setInterval(function(){
+    if(typeof loadSchedules!=='function')return;
+    var arr=loadSchedules();
+    var now=new Date();
+    arr.forEach(function(sc){
+      if(sc.date!==todayKey())return;
+      if(_autoStarted[sc.id])return;
+      var parts=sc.startTime.split(':');
+      var startDt=new Date();
+      startDt.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);
+      var diffMs=now-startDt;
+      // Within 0–60 seconds of start time
+      if(diffMs>=0&&diffMs<60000){
+        _autoStarted[sc.id]=true;
+        if(sc.isBreak){
+          // Break auto-start
+          if(typeof startBreak==='function')startBreak(sc.duration);
+          return;
+        }
+        // Study auto-start — only if timer not already running
+        if(typeof running!=='undefined'&&!running){
+          if(typeof startScheduledSession==='function')startScheduledSession(sc);
+          // Toast
+          var t=document.createElement('div');
+          t.innerHTML='&#x23F0; Auto-started: <b>'+sc.subject+'</b>';
+          t.style.cssText='position:fixed;top:70px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#0a3d1e,#1D9E75);color:#c8f5e0;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:99999;white-space:nowrap;box-shadow:0 4px 20px rgba(29,158,117,.4)';
+          document.body.appendChild(t);
+          setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},4000);
+        }
+      }
+    });
+  },5000);
 
   // ── Schedule type toggle ──
   window._scType='study';
